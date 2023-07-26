@@ -43,7 +43,8 @@ public:
   uint8_t IND();
   uint8_t IZY();
 
-  // Opcodes
+  // Opcodes =======================================================
+
   uint8_t ADC();
   uint8_t AND();
   uint8_t ASL();
@@ -113,12 +114,12 @@ public:
 	void clock();	// Perform one clock cycle's worth of update
 
   uint8_t fetch();
-  uint8_t fetched = 0x00;
+  uint8_t fetched = 0x00; // Represents the working input value to the ALU
 
-  uint16_t addr_abs = 0x0000;
-  uint16_t addr_rel = 0x0000;
+  uint16_t addr_abs = 0x0000; // All used memory addresses end up in here
+  uint16_t addr_rel = 0x00; // Represents absolute address following a branch
   uint8_t opcode = 0x00;
-  uint8_t cycles = 0;
+  uint8_t cycles = 0; 
 
 public:
   // The status register stores 8 flags. Ive enumerated these here for ease
@@ -160,6 +161,19 @@ private:
   uint8_t getFlag(FLAGS6502 flag);
   void setFlag(FLAGS6502 flag, bool value);
 
+
+
+  // This structure and the following vector are used to compile and store
+	// the opcode translation table. The 6502 can effectively have 256
+	// different instructions. Each of these are stored in a table in numerical
+	// order so they can be looked up easily, with no decoding required.
+	// Each table entry holds:
+	//	Pneumonic : A textual representation of the instruction (used for disassembly)
+	//	Opcode Function: A function pointer to the implementation of the opcode
+	//	Opcode Address Mode : A function pointer to the implementation of the 
+    //						  addressing mechanism used by the instruction
+	//	Cycle Count : An integer that represents the base number of clock cycles the
+	//				  CPU requires to perform the instruction
   struct INSTRUCTION
   {
     std::string name;

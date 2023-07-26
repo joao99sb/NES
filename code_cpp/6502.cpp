@@ -70,6 +70,9 @@ void CPU6502::setFlag(CPU6502::FLAGS6502 f, bool v){
   }
 }
 
+// Addressing Modes =============================================
+
+
 // Address Mode: Implied
 // There is no additional data required for this instruction. The instruction
 // does something very simple like like sets a status bit. However, we will
@@ -258,8 +261,19 @@ uint8_t CPU6502::REL(){
   return 0;
 }
 
-// instructions 
 
+// This function sources the data used by the instruction into 
+// a convenient numeric variable. Some instructions dont have to 
+// fetch data as the source is implied by the instruction. For example
+// "INX" increments the X register. There is no additional data
+// required. For all other addressing modes, the data resides at 
+// the location held within addr_abs, so it is read from there. 
+// Immediate adress mode exploits this slightly, as that has
+// set addr_abs = pc + 1, so it fetches the data from the
+// next byte for example "LDA $FF" just loads the accumulator with
+// 256, i.e. no far reaching memory fetch is required. "fetched"
+// is a variable global to the CPU, and is set by calling this 
+// function. It also returns it for convenience.
 uint8_t CPU6502::fetch(){
   if(!(this->lookup[this->opcode].addrmode == &CPU6502::IMP)){
     this->fetched = this->read(this->addr_abs);
@@ -267,131 +281,71 @@ uint8_t CPU6502::fetch(){
   return this->fetched;
 }
 
-uint8_t CPU6502::AND(){
-  this->fetch();
-  this->a &= this->fetched;
-  this->setFlag(this->Z,this->a==0x00);
-  this->setFlag(this->N,this->a==0x80);
 
-  return 1; 
 
-}
 
-uint8_t CPU6502::BCS(){
 
-  if(this->getFlag(C) == 1){
-    this->cycles++;
-    this->addr_abs = this->pc + this->addr_rel;
-
-    if((this->addr_abs & 0xff00) != (this->pc & 0xff00) ){
-      this->cycles++;
-    }
-
-    this->pc = this->addr_abs;
-  }
-
-  return 0;
-
-}
-uint8_t CPU6502::BCC(){
-
-  if(this->getFlag(C) == 0){
-    this->cycles++;
-    this->addr_abs = this->pc + this->addr_rel;
-
-    if((this->addr_abs & 0xff00) != (this->pc & 0xff00) ){
-      this->cycles++;
-    }
-
-    this->pc = this->addr_abs;
-  }
-
-  return 0;
-
-}
-uint8_t CPU6502::BEQ(){
-
-	if (this->getFlag(Z) == 1)
-	{
-		this->cycles++;
-		this->addr_abs = pc + addr_rel;
-
-		if ((this->addr_abs & 0xFF00) != (this->pc & 0xFF00))
-			cycles++;
-
-		this->pc = this->addr_abs;
-	}
-	return 0;
-
-}
-uint8_t CPU6502::BMI()
-{
-	if (this->getFlag(N) == 1)
-	{
-	this->cycles++;
-		this->addr_abs = pc + addr_rel;
-
-		if ((this->addr_abs & 0xFF00) != (this->pc & 0xFF00))
-			cycles++;
-
-		this->pc = this->addr_abs;
-	}
-	return 0;
-}
-
-	
-uint8_t CPU6502::BPL(){
-  	if (this->getFlag(N) == 0)
-	{
-	this->cycles++;
-		this->addr_abs = pc + addr_rel;
-
-		if ((this->addr_abs & 0xFF00) != (this->pc & 0xFF00))
-			cycles++;
-
-		this->pc = this->addr_abs;
-	}
-	return 0;
-}
-uint8_t CPU6502::BVC(){
-  	if (this->getFlag(V) == 0)
-	{
-	this->cycles++;
-		this->addr_abs = pc + addr_rel;
-
-		if ((this->addr_abs & 0xFF00) != (this->pc & 0xFF00))
-			cycles++;
-
-		this->pc = this->addr_abs;
-	}
-	return 0;
-}
-uint8_t CPU6502::BVS(){
-  	if (this->getFlag(V) == 1)
-	{
-	this->cycles++;
-		this->addr_abs = pc + addr_rel;
-
-		if ((this->addr_abs & 0xFF00) != (this->pc & 0xFF00))
-			cycles++;
-
-		this->pc = this->addr_abs;
-	}
-	return 0;
-}
-uint8_t CPU6502::CLC(){
-
-  this->setFlag(C,false);
-  return 0;
-
-}
-uint8_t CPU6502::CLD(){
-
-  this->setFlag(D,false);
-  return 0;
-
-}
-
+// Instruction: Add with Carry In
+// Function:    A = A + M + C
+// Flags Out:   C, V, N, Z
+//
+// Explanation:
+// The purpose of this function is to add a value to the accumulator and a carry bit. If
+// the result is > 255 there is an overflow setting the carry bit. Ths allows you to
+// chain together ADC instructions to add numbers larger than 8-bits. This in itself is
+// simple, however the 6502 supports the concepts of Negativity/Positivity and Signed Overflow.
+//
+// 10000100 = 128 + 4 = 132 in normal circumstances, we know this as unsigned and it allows
+// us to represent numbers between 0 and 255 (given 8 bits). The 6502 can also interpret 
+// this word as something else if we assume those 8 bits represent the range -128 to +127,
+// i.e. it has become signed.
+//
+// Since 132 > 127, it effectively wraps around, through -128, to -124. This wraparound is
+// called overflow, and this is a useful to know as it indicates that the calculation has
+// gone outside the permissable range, and therefore no longer makes numeric sense.
+//
+// Note the implementation of ADD is the same in binary, this is just about how the numbers
+// are represented, so the word 10000100 can be both -124 and 132 depending upon the 
+// context the programming is using it in. We can prove this!
+//
+//  10000100 =  132  or  -124
+// +00010001 = + 17      + 17
+//  ========    ===       ===     See, both are valid additions, but our interpretation of
+//  10010101 =  149  or  -107     the context changes the value, not the hardware!
+//
+// In principle under the -128 to 127 range:
+// 10000000 = -128, 11111111 = -1, 00000000 = 0, 00000000 = +1, 01111111 = +127
+// therefore negative numbers have the most significant set, positive numbers do not
+//
+// To assist us, the 6502 can set the overflow flag, if the result of the addition has
+// wrapped around. V <- ~(A^M) & A^(A+M+C) :D lol, let's work out why!
+//
+// Let's suppose we have A = 30, M = 10 and C = 0
+//          A = 30 = 00011110
+//          M = 10 = 00001010+
+//     RESULT = 40 = 00101000
+//
+// Here we have not gone out of range. The resulting significant bit has not changed.
+// So let's make a truth table to understand when overflow has occurred. Here I take
+// the MSB of each component, where R is RESULT.
+//
+// A  M  R | V | A^R | A^M |~(A^M) | 
+// 0  0  0 | 0 |  0  |  0  |   1   |
+// 0  0  1 | 1 |  1  |  0  |   1   |
+// 0  1  0 | 0 |  0  |  1  |   0   |
+// 0  1  1 | 0 |  1  |  1  |   0   |  so V = ~(A^M) & (A^R)
+// 1  0  0 | 0 |  1  |  1  |   0   |
+// 1  0  1 | 0 |  0  |  1  |   0   |
+// 1  1  0 | 1 |  1  |  0  |   1   |
+// 1  1  1 | 0 |  0  |  0  |   1   |
+//
+// We can see how the above equation calculates V, based on A, M and R. V was chosen
+// based on the following hypothesis:
+//       Positive Number + Positive Number = Negative Result -> Overflow
+//       Negative Number + Negative Number = Positive Result -> Overflow
+//       Positive Number + Negative Number = Either Result -> Cannot Overflow
+//       Positive Number + Positive Number = Positive Result -> OK! No Overflow
+//       Negative Number + Negative Number = Negative Result -> OK! NO Overflow
 uint8_t CPU6502::ADC(){
   this -> fetch();
   uint16_t temp = (uint16_t)a + (uint16_t)fetched + getFlag(C);
@@ -405,6 +359,32 @@ uint8_t CPU6502::ADC(){
   return 1;
 
 }
+
+// Instruction: Subtraction with Borrow In
+// Function:    A = A - M - (1 - C)
+// Flags Out:   C, V, N, Z
+//
+// Explanation:
+// Given the explanation for ADC above, we can reorganise our data
+// to use the same computation for addition, for subtraction by multiplying
+// the data by -1, i.e. make it negative
+//
+// A = A - M - (1 - C)  ->  A = A + -1 * (M - (1 - C))  ->  A = A + (-M + 1 + C)
+//
+// To make a signed positive number negative, we can invert the bits and add 1
+// (OK, I lied, a little bit of 1 and 2s complement :P)
+//
+//  5 = 00000101
+// -5 = 11111010 + 00000001 = 11111011 (or 251 in our 0 to 255 range)
+//
+// The range is actually unimportant, because if I take the value 15, and add 251
+// to it, given we wrap around at 256, the result is 10, so it has effectively 
+// subtracted 5, which was the original intention. (15 + 251) % 256 = 10
+//
+// Note that the equation above used (1-C), but this got converted to + 1 + C.
+// This means we already have the +1, so all we need to do is invert the bits
+// of M, the data(!) therfore we can simply add, exactly the same way we did 
+// before.
 uint8_t CPU6502::SBC(){
 
   fetch();
@@ -423,6 +403,13 @@ uint8_t CPU6502::SBC(){
 	a = temp & 0x00FF;
 	return 1;
 }
+
+// 1) Fetch the data you are working with
+// 2) Perform calculation
+// 3) Store the result in desired place
+// 4) Set Flags of the status register
+// 5) Return if instruction has potential to require additional 
+//    clock cycle
 
 
 // Instruction: Arithmetic Shift Left
@@ -452,6 +439,8 @@ uint8_t CPU6502::BIT()
 	return 0;
 }
 
+// Instruction: Branch if Not Equal
+// Function:    if(Z == 0) pc = address
 uint8_t CPU6502::BNE()
 {
 	if (this->getFlag(Z) == 0)
@@ -729,6 +718,158 @@ uint8_t CPU6502::NOP()
 	}
 	return 0;
 }
+// Instruction: Bitwise Logic AND
+// Function:    A = A & M
+// Flags Out:   N, Z
+uint8_t CPU6502::AND(){
+  this->fetch();
+  this->a &= this->fetched;
+  this->setFlag(this->Z,this->a==0x00);
+  this->setFlag(this->N,this->a==0x80);
+
+  return 1; 
+
+}
+
+// Instruction: Branch if Carry Set
+// Function:    if(C == 1) pc = address
+uint8_t CPU6502::BCS(){
+
+  if(this->getFlag(C) == 1){
+    this->cycles++;
+    this->addr_abs = this->pc + this->addr_rel;
+
+    if((this->addr_abs & 0xff00) != (this->pc & 0xff00) ){
+      this->cycles++;
+    }
+
+    this->pc = this->addr_abs;
+  }
+
+  return 0;
+
+}
+
+// Instruction: Branch if Carry Set
+// Function:    if(C == 1) pc = address
+uint8_t CPU6502::BCC(){
+
+  if(this->getFlag(C) == 0){
+    this->cycles++;
+    this->addr_abs = this->pc + this->addr_rel;
+
+    if((this->addr_abs & 0xff00) != (this->pc & 0xff00) ){
+      this->cycles++;
+    }
+
+    this->pc = this->addr_abs;
+  }
+
+  return 0;
+
+}
+
+// Instruction: Branch if Equal
+// Function:    if(Z == 1) pc = address
+uint8_t CPU6502::BEQ(){
+
+	if (this->getFlag(Z) == 1)
+	{
+		this->cycles++;
+		this->addr_abs = pc + addr_rel;
+
+		if ((this->addr_abs & 0xFF00) != (this->pc & 0xFF00))
+			cycles++;
+
+		this->pc = this->addr_abs;
+	}
+	return 0;
+
+}
+
+// Instruction: Branch if Negative
+// Function:    if(N == 1) pc = address
+uint8_t CPU6502::BMI()
+{
+	if (this->getFlag(N) == 1)
+	{
+	this->cycles++;
+		this->addr_abs = pc + addr_rel;
+
+		if ((this->addr_abs & 0xFF00) != (this->pc & 0xFF00))
+			cycles++;
+
+		this->pc = this->addr_abs;
+	}
+	return 0;
+}
+
+// Instruction: Branch if Positive
+// Function:    if(N == 0) pc = address
+uint8_t CPU6502::BPL(){
+  	if (this->getFlag(N) == 0)
+	{
+	this->cycles++;
+		this->addr_abs = pc + addr_rel;
+
+		if ((this->addr_abs & 0xFF00) != (this->pc & 0xFF00))
+			cycles++;
+
+		this->pc = this->addr_abs;
+	}
+	return 0;
+}
+
+// Instruction: Branch if Overflow Clear
+// Function:    if(V == 0) pc = address
+uint8_t CPU6502::BVC(){
+  	if (this->getFlag(V) == 0)
+	{
+	this->cycles++;
+		this->addr_abs = pc + addr_rel;
+
+		if ((this->addr_abs & 0xFF00) != (this->pc & 0xFF00))
+			cycles++;
+
+		this->pc = this->addr_abs;
+	}
+	return 0;
+}
+
+// Instruction: Branch if Overflow Set
+// Function:    if(V == 1) pc = address
+uint8_t CPU6502::BVS(){
+  	if (this->getFlag(V) == 1)
+	{
+	this->cycles++;
+		this->addr_abs = pc + addr_rel;
+
+		if ((this->addr_abs & 0xFF00) != (this->pc & 0xFF00))
+			cycles++;
+
+		this->pc = this->addr_abs;
+	}
+	return 0;
+}
+
+// Instruction: Clear Carry Flag
+// Function:    C = 0
+uint8_t CPU6502::CLC(){
+
+  this->setFlag(C,false);
+  return 0;
+
+}
+
+// Instruction: Clear Decimal Flag
+// Function:    D = 0
+uint8_t CPU6502::CLD(){
+
+  this->setFlag(D,false);
+  return 0;
+
+}
+
 
 
 // Instruction: Bitwise Logic OR
