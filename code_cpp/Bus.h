@@ -3,7 +3,7 @@
 
 #include <cstdint>
 #include <array>
-#include "6502.h"
+#include "6502/6502.h"
 
 #define RAM_SIZE_64kB 64 * 1024
 
