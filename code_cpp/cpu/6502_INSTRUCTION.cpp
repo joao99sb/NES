@@ -1,7 +1,5 @@
 #include "6502.h"
 
-
-
 // Instruction: Add with Carry In
 // Function:    A = A + M + C
 // Flags Out:   C, V, N, Z
@@ -13,7 +11,7 @@
 // simple, however the 6502 supports the concepts of Negativity/Positivity and Signed Overflow.
 //
 // 10000100 = 128 + 4 = 132 in normal circumstances, we know this as unsigned and it allows
-// us to represent numbers between 0 and 255 (given 8 bits). The 6502 can also interpret 
+// us to represent numbers between 0 and 255 (given 8 bits). The 6502 can also interpret
 // this word as something else if we assume those 8 bits represent the range -128 to +127,
 // i.e. it has become signed.
 //
@@ -22,7 +20,7 @@
 // gone outside the permissable range, and therefore no longer makes numeric sense.
 //
 // Note the implementation of ADD is the same in binary, this is just about how the numbers
-// are represented, so the word 10000100 can be both -124 and 132 depending upon the 
+// are represented, so the word 10000100 can be both -124 and 132 depending upon the
 // context the programming is using it in. We can prove this!
 //
 //  10000100 =  132  or  -124
@@ -46,7 +44,7 @@
 // So let's make a truth table to understand when overflow has occurred. Here I take
 // the MSB of each component, where R is RESULT.
 //
-// A  M  R | V | A^R | A^M |~(A^M) | 
+// A  M  R | V | A^R | A^M |~(A^M) |
 // 0  0  0 | 0 |  0  |  0  |   1   |
 // 0  0  1 | 1 |  1  |  0  |   1   |
 // 0  1  0 | 0 |  0  |  1  |   0   |
@@ -63,18 +61,37 @@
 //       Positive Number + Negative Number = Either Result -> Cannot Overflow
 //       Positive Number + Positive Number = Positive Result -> OK! No Overflow
 //       Negative Number + Negative Number = Negative Result -> OK! NO Overflow
-uint8_t CPU6502::ADC(){
-  this -> fetch();
-  uint16_t temp = (uint16_t)a + (uint16_t)fetched + getFlag(C);
-  setFlag(C,temp > 255);
-  setFlag(Z ,(temp &  0x00ff)==0);
-  setFlag(N,temp &  0x08);
- 	// The signed Overflow flag is set based on all that up there! :D
-	setFlag(V, (~((uint16_t)a ^ (uint16_t)fetched) & ((uint16_t)a ^ (uint16_t)temp)) & 0x0080);
-	
-  this->a = temp & 0x00ff;
-  return 1;
+uint8_t CPU6502::ADC()
+{
+	// Fetch the operand (data to be added to the accumulator).
+	this->fetch();
 
+	// Convert the accumulator (a) and the fetched operand (fetched) to 16-bit to avoid overflow.
+	uint16_t acc_16bit = static_cast<uint16_t>(this->a);
+	uint16_t fetched_16bit = static_cast<uint16_t>(this->fetched);
+	uint16_t carry = static_cast<uint16_t>(getFlag(C));
+	uint16_t temp = acc_16bit + fetched_16bit + carry;
+
+	// Set the Carry flag based on whether the addition resulted in a value greater than 255.
+	setFlag(C, temp > 255);
+
+	// Set the Zero flag if the result is equal to zero.
+	setFlag(Z, (temp & 0x00FF) == 0);
+
+	// Set the Negative flag based on the 8th bit of the result (temp).
+	setFlag(N, temp & 0x0080);
+
+	// Calculate the overflow condition separately.
+	uint16_t xor_a_fetched = acc_16bit ^ fetched_16bit;
+	uint16_t xor_a_temp = acc_16bit ^ temp;
+	bool overflow_condition = (~xor_a_fetched & xor_a_temp) & 0x0080;
+	setFlag(V, overflow_condition);
+
+	// Store the low 8 bits of the result back into the accumulator (a).
+	this->a = temp & 0x00FF;
+
+	// Return 1, indicating that the operation took one cycle.
+	return 1;
 }
 
 // Instruction: Subtraction with Borrow In
@@ -95,29 +112,46 @@ uint8_t CPU6502::ADC(){
 // -5 = 11111010 + 00000001 = 11111011 (or 251 in our 0 to 255 range)
 //
 // The range is actually unimportant, because if I take the value 15, and add 251
-// to it, given we wrap around at 256, the result is 10, so it has effectively 
+// to it, given we wrap around at 256, the result is 10, so it has effectively
 // subtracted 5, which was the original intention. (15 + 251) % 256 = 10
 //
 // Note that the equation above used (1-C), but this got converted to + 1 + C.
 // This means we already have the +1, so all we need to do is invert the bits
-// of M, the data(!) therfore we can simply add, exactly the same way we did 
+// of M, the data(!) therfore we can simply add, exactly the same way we did
 // before.
-uint8_t CPU6502::SBC(){
+uint8_t CPU6502::SBC()
+{
 
-  fetch();
-	
-	// Operating in 16-bit domain to capture carry out
-	
-	// We can invert the bottom 8 bits with bitwise xor
-	uint16_t value = ((uint16_t)fetched) ^ 0x00FF;
-	
-	// Notice this is exactly the same as addition from here!
-	uint16_t temp = (uint16_t)a + value + (uint16_t)getFlag(C);
+	// Fetch the operand (data to be subtracted from the accumulator).
+	this->fetch();
+
+	// Invert the bottom 8 bits of the fetched operand using bitwise XOR with 0x00FF.
+	uint16_t inverted_value = static_cast<uint16_t>(fetched) ^ 0x00FF;
+
+	// Operating in 16-bit domain to capture carry out.
+	uint16_t acc_16bit = static_cast<uint16_t>(a);
+	uint16_t value_16bit = static_cast<uint16_t>(inverted_value);
+
+	// Calculate the temporary sum (same as addition).
+	uint16_t temp = acc_16bit + value_16bit + static_cast<uint16_t>(getFlag(C));
+
+	// Set the Carry flag based on whether the sum is greater than 255.
 	setFlag(C, temp & 0xFF00);
-	setFlag(Z, ((temp & 0x00FF) == 0));
-	setFlag(V, (temp ^ (uint16_t)a) & (temp ^ value) & 0x0080);
+
+	// Set the Zero flag if the low 8 bits of the sum are equal to zero.
+	setFlag(Z, (temp & 0x00FF) == 0);
+
+	// Calculate the signed Overflow flag condition.
+	bool overflow_condition = (temp ^ acc_16bit) & (temp ^ value_16bit) & 0x0080;
+	setFlag(V, overflow_condition);
+
+	// Set the Negative flag based on the 8th bit of the sum (temp).
 	setFlag(N, temp & 0x0080);
-	a = temp & 0x00FF;
+
+	// Store the low 8 bits of the sum back into the accumulator (a).
+	this->a = temp & 0x00FF;
+
+	// Return 1, indicating that the operation took one cycle.
 	return 1;
 }
 
@@ -125,34 +159,61 @@ uint8_t CPU6502::SBC(){
 // 2) Perform calculation
 // 3) Store the result in desired place
 // 4) Set Flags of the status register
-// 5) Return if instruction has potential to require additional 
+// 5) Return if instruction has potential to require additional
 //    clock cycle
-
 
 // Instruction: Arithmetic Shift Left
 // Function:    A = C <- (A << 1) <- 0
 // Flags Out:   N, Z, C
 uint8_t CPU6502::ASL()
 {
+	// Fetch the operand (data to be shifted left).
 	this->fetch();
-	uint16_t temp = (uint16_t)fetched << 1;
-	setFlag(C, (temp & 0xFF00) > 0);
-	setFlag(Z, (temp & 0x00FF) == 0x00);
-	setFlag(N, temp & 0x80);
+
+	// Shift the fetched operand left by 1 bit, treating it as a 16-bit value to capture the carry.
+	uint16_t shifted_value = static_cast<uint16_t>(fetched) << 1;
+
+	// Set the Carry flag based on the 9th bit of the shifted value.
+	setFlag(C, (shifted_value & 0xFF00) > 0);
+
+	// Set the Zero flag if the low 8 bits of the shifted value are equal to zero.
+	setFlag(Z, (shifted_value & 0x00FF) == 0x00);
+
+	// Set the Negative flag based on the 8th bit of the shifted value.
+	setFlag(N, shifted_value & 0x80);
+
+	// Check the addressing mode to decide whether to update the accumulator (a) or write back to memory.
 	if (lookup[opcode].addrmode == &CPU6502::IMP)
-		a = temp & 0x00FF;
+	{
+		// For the implicit addressing mode, update the accumulator (a).
+		this->a = shifted_value & 0x00FF;
+	}
 	else
-		write(addr_abs, temp & 0x00FF);
+	{
+		// For other addressing modes, write the shifted value back to memory.
+		write(addr_abs, shifted_value & 0x00FF);
+	}
+
 	return 0;
 }
 
 uint8_t CPU6502::BIT()
 {
+	// Fetch the operand (data to be bitwise ANDed with the accumulator).
 	fetch();
-	uint16_t temp = a & fetched;
-	setFlag(Z, (temp & 0x00FF) == 0x00);
+
+	// Perform bitwise AND between the accumulator (a) and the fetched operand.
+	uint16_t and_result = a & fetched;
+
+	// Set the Zero flag based on whether the result of the AND operation is equal to zero.
+	setFlag(Z, (and_result & 0x00FF) == 0x00);
+
+	// Set the Negative flag based on the 7th bit of the fetched operand.
 	setFlag(N, fetched & (1 << 7));
+
+	// Set the Overflow flag based on the 6th bit of the fetched operand.
 	setFlag(V, fetched & (1 << 6));
+
 	return 0;
 }
 
@@ -160,16 +221,25 @@ uint8_t CPU6502::BIT()
 // Function:    if(Z == 0) pc = address
 uint8_t CPU6502::BNE()
 {
-	if (this->getFlag(Z) == 0)
+	// Check if the Zero flag is not set (Z == 0).
+	if (!getFlag(Z))
 	{
+		// Increment the number of cycles, as a branch is taken.
 		cycles++;
+
+		// Calculate the absolute address for the branch target.
 		addr_abs = pc + addr_rel;
 
+		// Check if the branch crosses a page boundary (additional cycle).
 		if ((addr_abs & 0xFF00) != (pc & 0xFF00))
+		{
 			cycles++;
+		}
 
+		// Set the Program Counter (PC) to the branch target address.
 		pc = addr_abs;
 	}
+
 	return 0;
 }
 
@@ -178,7 +248,7 @@ uint8_t CPU6502::BNE()
 uint8_t CPU6502::BRK()
 {
 	pc++;
-	
+
 	setFlag(I, 1);
 	write(0x0100 + stkpt, (pc >> 8) & 0x00FF);
 	stkpt--;
@@ -223,7 +293,6 @@ uint8_t CPU6502::CMP()
 	return 1;
 }
 
-
 // Instruction: Compare X Register
 // Function:    C <- X >= M      Z <- (X - M) == 0
 // Flags Out:   N, C, Z
@@ -236,7 +305,6 @@ uint8_t CPU6502::CPX()
 	setFlag(N, temp & 0x0080);
 	return 0;
 }
-
 
 // Instruction: Compare Y Register
 // Function:    C <- Y >= M      Z <- (Y - M) == 0
@@ -251,7 +319,6 @@ uint8_t CPU6502::CPY()
 	return 0;
 }
 
-
 // Instruction: Decrement Value at Memory Location
 // Function:    M = M - 1
 // Flags Out:   N, Z
@@ -264,7 +331,6 @@ uint8_t CPU6502::DEC()
 	setFlag(N, temp & 0x0080);
 	return 0;
 }
-
 
 // Instruction: Decrement X Register
 // Function:    X = X - 1
@@ -288,19 +354,17 @@ uint8_t CPU6502::DEY()
 	return 0;
 }
 
-
 // Instruction: Bitwise Logic XOR
 // Function:    A = A xor M
 // Flags Out:   N, Z
 uint8_t CPU6502::EOR()
 {
 	fetch();
-	a = a ^ fetched;	
+	a = a ^ fetched;
 	setFlag(Z, a == 0x00);
 	setFlag(N, a & 0x80);
 	return 1;
 }
-
 
 // Instruction: Increment Value at Memory Location
 // Function:    M = M + 1
@@ -315,7 +379,6 @@ uint8_t CPU6502::INC()
 	return 0;
 }
 
-
 // Instruction: Increment X Register
 // Function:    X = X + 1
 // Flags Out:   N, Z
@@ -326,7 +389,6 @@ uint8_t CPU6502::INX()
 	setFlag(N, x & 0x80);
 	return 0;
 }
-
 
 // Instruction: Increment Y Register
 // Function:    Y = Y + 1
@@ -339,7 +401,6 @@ uint8_t CPU6502::INY()
 	return 0;
 }
 
-
 // Instruction: Jump To Location
 // Function:    pc = address
 uint8_t CPU6502::JMP()
@@ -347,7 +408,6 @@ uint8_t CPU6502::JMP()
 	pc = addr_abs;
 	return 0;
 }
-
 
 // Instruction: Jump To Sub-Routine
 // Function:    Push current pc to stack, pc = address
@@ -364,7 +424,6 @@ uint8_t CPU6502::JSR()
 	return 0;
 }
 
-
 // Instruction: Load The Accumulator
 // Function:    A = M
 // Flags Out:   N, Z
@@ -377,7 +436,6 @@ uint8_t CPU6502::LDA()
 	return 1;
 }
 
-
 // Instruction: Load The X Register
 // Function:    X = M
 // Flags Out:   N, Z
@@ -389,7 +447,6 @@ uint8_t CPU6502::LDX()
 	setFlag(N, x & 0x80);
 	return 1;
 }
-
 
 // Instruction: Load The Y Register
 // Function:    Y = M
@@ -407,7 +464,7 @@ uint8_t CPU6502::LSR()
 {
 	fetch();
 	setFlag(C, fetched & 0x0001);
-	uint16_t temp = fetched >> 1;	
+	uint16_t temp = fetched >> 1;
 	setFlag(Z, (temp & 0x00FF) == 0x0000);
 	setFlag(N, temp & 0x0080);
 	if (lookup[opcode].addrmode == &CPU6502::IMP)
@@ -423,7 +480,8 @@ uint8_t CPU6502::NOP()
 	// based on https://wiki.nesdev.com/w/index.php/CPU_unofficial_opcodes
 	// and will add more based on game compatibility, and ultimately
 	// I'd like to cover all illegal opcodes too
-	switch (opcode) {
+	switch (opcode)
+	{
 	case 0x1C:
 	case 0x3C:
 	case 0x5C:
@@ -438,57 +496,62 @@ uint8_t CPU6502::NOP()
 // Instruction: Bitwise Logic AND
 // Function:    A = A & M
 // Flags Out:   N, Z
-uint8_t CPU6502::AND(){
-  this->fetch();
-  this->a &= this->fetched;
-  this->setFlag(this->Z,this->a==0x00);
-  this->setFlag(this->N,this->a==0x80);
+uint8_t CPU6502::AND()
+{
+	this->fetch();
+	this->a &= this->fetched;
+	this->setFlag(this->Z, this->a == 0x00);
+	this->setFlag(this->N, this->a == 0x80);
 
-  return 1; 
-
+	return 1;
 }
 
 // Instruction: Branch if Carry Set
 // Function:    if(C == 1) pc = address
-uint8_t CPU6502::BCS(){
+uint8_t CPU6502::BCS()
+{
 
-  if(this->getFlag(C) == 1){
-    this->cycles++;
-    this->addr_abs = this->pc + this->addr_rel;
+	if (this->getFlag(C) == 1)
+	{
+		this->cycles++;
+		this->addr_abs = this->pc + this->addr_rel;
 
-    if((this->addr_abs & 0xff00) != (this->pc & 0xff00) ){
-      this->cycles++;
-    }
+		if ((this->addr_abs & 0xff00) != (this->pc & 0xff00))
+		{
+			this->cycles++;
+		}
 
-    this->pc = this->addr_abs;
-  }
+		this->pc = this->addr_abs;
+	}
 
-  return 0;
-
+	return 0;
 }
 
 // Instruction: Branch if Carry Set
 // Function:    if(C == 1) pc = address
-uint8_t CPU6502::BCC(){
+uint8_t CPU6502::BCC()
+{
 
-  if(this->getFlag(C) == 0){
-    this->cycles++;
-    this->addr_abs = this->pc + this->addr_rel;
+	if (this->getFlag(C) == 0)
+	{
+		this->cycles++;
+		this->addr_abs = this->pc + this->addr_rel;
 
-    if((this->addr_abs & 0xff00) != (this->pc & 0xff00) ){
-      this->cycles++;
-    }
+		if ((this->addr_abs & 0xff00) != (this->pc & 0xff00))
+		{
+			this->cycles++;
+		}
 
-    this->pc = this->addr_abs;
-  }
+		this->pc = this->addr_abs;
+	}
 
-  return 0;
-
+	return 0;
 }
 
 // Instruction: Branch if Equal
 // Function:    if(Z == 1) pc = address
-uint8_t CPU6502::BEQ(){
+uint8_t CPU6502::BEQ()
+{
 
 	if (this->getFlag(Z) == 1)
 	{
@@ -501,7 +564,6 @@ uint8_t CPU6502::BEQ(){
 		this->pc = this->addr_abs;
 	}
 	return 0;
-
 }
 
 // Instruction: Branch if Negative
@@ -510,7 +572,7 @@ uint8_t CPU6502::BMI()
 {
 	if (this->getFlag(N) == 1)
 	{
-	this->cycles++;
+		this->cycles++;
 		this->addr_abs = pc + addr_rel;
 
 		if ((this->addr_abs & 0xFF00) != (this->pc & 0xFF00))
@@ -523,10 +585,11 @@ uint8_t CPU6502::BMI()
 
 // Instruction: Branch if Positive
 // Function:    if(N == 0) pc = address
-uint8_t CPU6502::BPL(){
-  	if (this->getFlag(N) == 0)
+uint8_t CPU6502::BPL()
+{
+	if (this->getFlag(N) == 0)
 	{
-	this->cycles++;
+		this->cycles++;
 		this->addr_abs = pc + addr_rel;
 
 		if ((this->addr_abs & 0xFF00) != (this->pc & 0xFF00))
@@ -539,10 +602,11 @@ uint8_t CPU6502::BPL(){
 
 // Instruction: Branch if Overflow Clear
 // Function:    if(V == 0) pc = address
-uint8_t CPU6502::BVC(){
-  	if (this->getFlag(V) == 0)
+uint8_t CPU6502::BVC()
+{
+	if (this->getFlag(V) == 0)
 	{
-	this->cycles++;
+		this->cycles++;
 		this->addr_abs = pc + addr_rel;
 
 		if ((this->addr_abs & 0xFF00) != (this->pc & 0xFF00))
@@ -555,10 +619,11 @@ uint8_t CPU6502::BVC(){
 
 // Instruction: Branch if Overflow Set
 // Function:    if(V == 1) pc = address
-uint8_t CPU6502::BVS(){
-  	if (this->getFlag(V) == 1)
+uint8_t CPU6502::BVS()
+{
+	if (this->getFlag(V) == 1)
 	{
-	this->cycles++;
+		this->cycles++;
 		this->addr_abs = pc + addr_rel;
 
 		if ((this->addr_abs & 0xFF00) != (this->pc & 0xFF00))
@@ -571,23 +636,21 @@ uint8_t CPU6502::BVS(){
 
 // Instruction: Clear Carry Flag
 // Function:    C = 0
-uint8_t CPU6502::CLC(){
+uint8_t CPU6502::CLC()
+{
 
-  this->setFlag(C,false);
-  return 0;
-
+	this->setFlag(C, false);
+	return 0;
 }
 
 // Instruction: Clear Decimal Flag
 // Function:    D = 0
-uint8_t CPU6502::CLD(){
+uint8_t CPU6502::CLD()
+{
 
-  this->setFlag(D,false);
-  return 0;
-
+	this->setFlag(D, false);
+	return 0;
 }
-
-
 
 // Instruction: Bitwise Logic OR
 // Function:    A = A | M
@@ -601,7 +664,6 @@ uint8_t CPU6502::ORA()
 	return 1;
 }
 
-
 // Instruction: Push Accumulator to Stack
 // Function:    A -> stack
 uint8_t CPU6502::PHA()
@@ -610,7 +672,6 @@ uint8_t CPU6502::PHA()
 	stkpt--;
 	return 0;
 }
-
 
 // Instruction: Push Status Register to Stack
 // Function:    status -> stack
@@ -624,7 +685,6 @@ uint8_t CPU6502::PHP()
 	return 0;
 }
 
-
 // Instruction: Pop Accumulator off Stack
 // Function:    A <- stack
 // Flags Out:   N, Z
@@ -636,7 +696,6 @@ uint8_t CPU6502::PLA()
 	setFlag(N, a & 0x80);
 	return 0;
 }
-
 
 // Instruction: Pop Status Register off Stack
 // Function:    Status <- stack
@@ -696,13 +755,10 @@ uint8_t CPU6502::RTS()
 	pc = (uint16_t)read(0x0100 + stkpt);
 	stkpt++;
 	pc |= (uint16_t)read(0x0100 + stkpt) << 8;
-	
+
 	pc++;
 	return 0;
 }
-
-
-
 
 // Instruction: Set Carry Flag
 // Function:    C = 1
@@ -712,7 +768,6 @@ uint8_t CPU6502::SEC()
 	return 0;
 }
 
-
 // Instruction: Set Decimal Flag
 // Function:    D = 1
 uint8_t CPU6502::SED()
@@ -720,7 +775,6 @@ uint8_t CPU6502::SED()
 	setFlag(D, true);
 	return 0;
 }
-
 
 // Instruction: Set Interrupt Flag / Enable Interrupts
 // Function:    I = 1
@@ -730,7 +784,6 @@ uint8_t CPU6502::SEI()
 	return 0;
 }
 
-
 // Instruction: Store Accumulator at Address
 // Function:    M = A
 uint8_t CPU6502::STA()
@@ -738,7 +791,6 @@ uint8_t CPU6502::STA()
 	write(addr_abs, a);
 	return 0;
 }
-
 
 // Instruction: Store X Register at Address
 // Function:    M = X
@@ -748,7 +800,6 @@ uint8_t CPU6502::STX()
 	return 0;
 }
 
-
 // Instruction: Store Y Register at Address
 // Function:    M = Y
 uint8_t CPU6502::STY()
@@ -756,7 +807,6 @@ uint8_t CPU6502::STY()
 	write(addr_abs, y);
 	return 0;
 }
-
 
 // Instruction: Transfer Accumulator to X Register
 // Function:    X = A
@@ -769,7 +819,6 @@ uint8_t CPU6502::TAX()
 	return 0;
 }
 
-
 // Instruction: Transfer Accumulator to Y Register
 // Function:    Y = A
 // Flags Out:   N, Z
@@ -780,7 +829,6 @@ uint8_t CPU6502::TAY()
 	setFlag(N, y & 0x80);
 	return 0;
 }
-
 
 // Instruction: Transfer Stack Pointer to X Register
 // Function:    X = stack pointer
@@ -793,7 +841,6 @@ uint8_t CPU6502::TSX()
 	return 0;
 }
 
-
 // Instruction: Transfer X Register to Accumulator
 // Function:    A = X
 // Flags Out:   N, Z
@@ -805,7 +852,6 @@ uint8_t CPU6502::TXA()
 	return 0;
 }
 
-
 // Instruction: Transfer X Register to Stack Pointer
 // Function:    stack pointer = X
 uint8_t CPU6502::TXS()
@@ -813,7 +859,6 @@ uint8_t CPU6502::TXS()
 	stkpt = x;
 	return 0;
 }
-
 
 // Instruction: Transfer Y Register to Accumulator
 // Function:    A = Y
@@ -825,7 +870,6 @@ uint8_t CPU6502::TYA()
 	setFlag(N, a & 0x80);
 	return 0;
 }
-
 
 // This function captures illegal opcodes
 uint8_t CPU6502::XXX()

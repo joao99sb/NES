@@ -13,6 +13,7 @@
 
 // serve para que o valor aplicado do endereço não utrapace 2kb [0x0000 - 0x07FF]
 #define CPU_RAM_MASK 0x07FF
+#define PPU_RAM_MASK 0x0007
 
 class Bus
 {
