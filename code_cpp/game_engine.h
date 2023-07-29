@@ -91,16 +91,9 @@ int main()
 #define OLC_KEYBOARD_UK
 #endif
 
-#if defined(USE_EXPERIMENTAL_FS) || defined(FORCE_EXPERIMENTAL_FS)
-// C++14
-#define _SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING
-#include <experimental/filesystem>
-namespace _gfs = std::experimental::filesystem::v1;
-#else
 // C++17
 #include <filesystem>
 namespace _gfs = std::filesystem;
-#endif
 
 #define olcT(s) s
 
@@ -109,37 +102,9 @@ namespace _gfs = std::filesystem;
 // O------------------------------------------------------------------------------O
 // | PLATFORM SELECTION CODE, Thanks slavka!                                      |
 // O------------------------------------------------------------------------------O
-
-// Platform
-#if !defined(OLC_PLATFORM_WINAPI) && !defined(OLC_PLATFORM_X11) && !defined(OLC_PLATFORM_GLUT) && !defined(OLC_PLATFORM_EMSCRIPTEN) && !defined(OLC_PLATFORM_HEADLESS)
-#if !defined(OLC_PLATFORM_CUSTOM_EX)
-#if defined(_WIN32)
-#define OLC_PLATFORM_WINAPI
-#endif
-#if defined(__linux__) || defined(__FreeBSD__)
 #define OLC_PLATFORM_X11
-#endif
-
-#endif
-#endif
-
-// Renderer
-#if !defined(OLC_GFX_OPENGL10) && !defined(OLC_GFX_OPENGL33) && !defined(OLC_GFX_DIRECTX10) && !defined(OLC_GFX_HEADLESS)
-#if !defined(OLC_GFX_CUSTOM_EX)
-
 #define OLC_GFX_OPENGL10
-#endif
-#endif
-
-// Image loader
-#if !defined(OLC_IMAGE_STB) && !defined(OLC_IMAGE_GDI) && !defined(OLC_IMAGE_LIBPNG) && !defined(OLC_IMAGE_HEADLESS)
-#if !defined(OLC_IMAGE_CUSTOM_EX)
-
-#if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__) || defined(__EMSCRIPTEN__)
 #define OLC_IMAGE_LIBPNG
-#endif
-#endif
-#endif
 
 // O------------------------------------------------------------------------------O
 // | PLATFORM-SPECIFIC DEPENDENCIES                                               |
@@ -1078,13 +1043,6 @@ namespace olc
 
 #pragma endregion
 
-#pragma region opengl33_iface
-// In order to facilitate more advanced graphics features, some PGEX
-// will rely on shaders. Instead of having each PGEX responsible for
-// managing this, for convenience, this interface exists.
-
-#pragma endregion
-
 #endif // OLC_PGE_DEF
 
 // O------------------------------------------------------------------------------O
@@ -1691,6 +1649,7 @@ namespace olc
 #if !defined(PGE_USE_CUSTOM_START)
   olc::rcode PixelGameEngine::Start()
   {
+
     if (platform->ApplicationStartUp() != olc::OK)
       return olc::FAIL;
 
@@ -4299,9 +4258,7 @@ namespace olc
 // O------------------------------------------------------------------------------O
 #if defined(OLC_GFX_OPENGL10)
 
-#if defined(__linux__) || defined(__FreeBSD__)
 #include <GL/gl.h>
-#endif
 
 #if defined(OLC_PLATFORM_X11)
 namespace X11
@@ -4558,30 +4515,12 @@ namespace olc
   };
 }
 #endif
-// O------------------------------------------------------------------------------O
-// | END RENDERER: OpenGL 1.0 (the original, the best...)                         |
-// O------------------------------------------------------------------------------O
-#pragma endregion
-
-// O------------------------------------------------------------------------------O
-// | START RENDERER: OpenGL 3.3 (3.0 es) (sh-sh-sh-shaders....)                   |
-// O------------------------------------------------------------------------------O
-
-// O------------------------------------------------------------------------------O
-// | END RENDERER: OpenGL 3.3 (3.0 es) (sh-sh-sh-shaders....)                     |
-// O------------------------------------------------------------------------------O
-#pragma endregion
 
 // O------------------------------------------------------------------------------O
 // | olcPixelGameEngine Image loaders                                             |
 // O------------------------------------------------------------------------------O
 
-#pragma region image_gdi
-// O------------------------------------------------------------------------------O
-// | START IMAGE LOADER: GDI+, Windows Only, always exists, a little slow         |
-// O------------------------------------------------------------------------------O
 
-#pragma endregion
 
 #pragma region image_libpng
 // O------------------------------------------------------------------------------O
@@ -4717,25 +4656,10 @@ namespace olc
 // O------------------------------------------------------------------------------O
 #pragma endregion
 
-// O------------------------------------------------------------------------------O
-// | olcPixelGameEngine Platforms                                                 |
-// O------------------------------------------------------------------------------O
-
-#pragma region platform_windows
-// O------------------------------------------------------------------------------O
-// | START PLATFORM: MICROSOFT WINDOWS XP, VISTA, 7, 8, 10                        |
-// O------------------------------------------------------------------------------O
-
-// O------------------------------------------------------------------------------O
-// | END PLATFORM: MICROSOFT WINDOWS XP, VISTA, 7, 8, 10                          |
-// O------------------------------------------------------------------------------O
-#pragma endregion
-
 #pragma region platform_linux
 // O------------------------------------------------------------------------------O
 // | START PLATFORM: LINUX                                                        |
 // O------------------------------------------------------------------------------O
-#if defined(OLC_PLATFORM_X11)
 namespace olc
 {
   class Platform_Linux : public olc::Platform
@@ -5060,13 +4984,12 @@ namespace olc
     }
   };
 }
-#endif
+#pragma endregion
 // O------------------------------------------------------------------------------O
 // | END PLATFORM: LINUX                                                          |
 // O------------------------------------------------------------------------------O
 
 #endif // Headless
-
 // O------------------------------------------------------------------------------O
 // | olcPixelGameEngine Auto-Configuration                                        |
 // O------------------------------------------------------------------------------O

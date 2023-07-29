@@ -10,9 +10,13 @@
 class Demo_olc6502 : public olc::PixelGameEngine
 {
 public:
-	Demo_olc6502() { sAppName = "olc6502 Demonstration"; }
+	Demo_olc6502() { sAppName = "2c02 Demonstration"; }
 
+	// The NES
 	Bus nes;
+	std::shared_ptr<Cartridge> cart;
+	bool bEmulationRun = false;
+	float fResidualTime = 0.0f;
 	std::map<uint16_t, std::string> mapAsm;
 
 	std::string hex(uint32_t n, uint8_t d)
@@ -32,7 +36,7 @@ public:
 			std::string sOffset = "$" + hex(nAddr, 4) + ":";
 			for (int col = 0; col < nColumns; col++)
 			{
-				sOffset += " " + hex(nes.read(nAddr, true), 2);
+				sOffset += " " + hex(nes.cpuRead(nAddr, true), 2);
 				nAddr += 1;
 			}
 			DrawString(nRamX, nRamY, sOffset);
@@ -93,51 +97,22 @@ public:
 
 	bool OnUserCreate()
 	{
-		// Load Program (assembled at https://www.masswerk.at/6502/assembler.html)
-		/*
-			*=$8000 // serve para escrever as instruções a partir da posicao 8000 na memória
-			LDX #10
-			STX $0000
-			LDX #3
-			STX $0001
-			LDY $0000
-			LDA #0
-			CLC
-			loop
-			ADC $0001
-			DEY
-			BNE loop
-			STA $0002
-			NOP
-			NOP
-			NOP
-		*/
-
-		// Convert hex string into bytes for RAM
-		std::stringstream ss;
-		ss << "A2 0A 8E 00 00 A2 03 8E 01 00 AC 00 00 A9 00 18 6D 01 00 88 D0 FA 8D 02 00 EA EA EA";
-		uint16_t nOffset = 0x8000;
-		while (!ss.eof())
+		// Load the cartridge
+		cart = std::make_shared<Cartridge>("nestest.nes");
+		if (!cart->ImageValid())
 		{
-			std::string b;
-			ss >> b;
-			nes.ram[nOffset++] = (uint8_t)std::stoul(b, nullptr, 16);
-			// std::stoul(b, nullptr, 16): A função std::stoul é usada para converter a string b em um número inteiro sem sinal (unsigned long int).
-			// O segundo argumento nullptr indica que não há necessidade de obter um ponteiro para o primeiro caractere não convertido (se houver).
-			// O terceiro argumento 16 especifica que a string está no formato hexadecimal.
+			std::cout << "invalid file" << std::endl;
+			return false;
 		}
 
-		// Set Reset Vector
-		nes.ram[0xFFFC] = 0x00;
-		nes.ram[0xFFFD] = 0x80;
-
-		// Dont forget to set IRQ and NMI vectors if you want to play with those
+		// Insert into NES
+		nes.insertCartridge(cart);
 
 		// Extract dissassembly
 		mapAsm = nes.cpu.disassemble(0x0000, 0xFFFF);
 
-		// Reset
-		nes.cpu.reset();
+		// Reset NES
+		nes.reset();
 		return true;
 	}
 
@@ -145,44 +120,81 @@ public:
 	{
 		Clear(olc::DARK_BLUE);
 
+		if (bEmulationRun)
+		{
+
+			if (fResidualTime > 0.0f)
+			{
+				fResidualTime -= fElapsedTime;
+			}
+			else
+			{
+				fResidualTime += (1.0f / 60.0f) - fElapsedTime;
+				do
+				{
+					nes.clock();
+				} while (!nes.ppu.frame_complete);
+				nes.ppu.frame_complete = false;
+			}
+		}
+		else
+		{
+
+			// Emulate code step-by-step
+			if (GetKey(olc::Key::C).bPressed)
+			{
+				// Clock enough times to execute a whole CPU instruction
+				do
+				{
+					nes.clock();
+				} while (!nes.cpu.complete());
+				// CPU clock runs slower than system clock, so it may be
+				// complete for additional system clock cycles. Drain
+				// those out
+				do
+				{
+					nes.clock();
+				} while (nes.cpu.complete());
+			}
+
+			if (GetKey(olc::Key::F).bPressed)
+			{
+				// clock enougth times to draw a single frame
+				do
+				{
+					nes.clock();
+				} while (!nes.ppu.frame_complete);
+
+				// use residual clock cycles to complete current instruction
+				do
+				{
+					nes.clock();
+				} while (!nes.cpu.complete());
+
+				// reset frame completion flag
+				nes.ppu.frame_complete = false;
+			}
+		}
 		if (GetKey(olc::Key::SPACE).bPressed)
 		{
-			do
-			{
-				nes.cpu.clock();
-			} while (!nes.cpu.complete());
+			bEmulationRun = !bEmulationRun;
 		}
 
+		// Emulate one whole frame
 		if (GetKey(olc::Key::R).bPressed)
-			nes.cpu.reset();
+			nes.reset();
 
-		if (GetKey(olc::Key::I).bPressed)
-			nes.cpu.irq();
+		DrawCpu(516, 2);
+		DrawCode(516, 72, 26);
 
-		if (GetKey(olc::Key::N).bPressed)
-			nes.cpu.nmi();
-
-		// Draw Ram Page 0x00
-		DrawRam(2, 2, 0x0000, 16, 16);
-		DrawRam(2, 182, 0x8000, 16, 16);
-		DrawCpu(448, 2);
-		DrawCode(448, 72, 26);
-
-		DrawString(10, 370, "SPACE = Step Instruction    R = RESET    I = IRQ    N = NMI");
-
+		DrawSprite(0, 0, &nes.ppu.getScreen(), 2);
 		return true;
 	}
 };
 
-struct Test
-{
-	std::string name;
-	int value;
-};
-
 int main(int argc, char const *argv[])
 {
-
+	std::cout << "Welcome" << std::endl;
 	Demo_olc6502 demo;
 	demo.Construct(680, 480, 2, 2);
 	demo.Start();
