@@ -19,6 +19,8 @@ public:
 	float fResidualTime = 0.0f;
 	std::map<uint16_t, std::string> mapAsm;
 
+	uint8_t selected_palette = 0x00;
+
 	std::string hex(uint32_t n, uint8_t d)
 	{
 		// cria uma sting com tamanho d e com o char 0 ocupando todas as posições
@@ -184,8 +186,24 @@ public:
 		if (GetKey(olc::Key::R).bPressed)
 			nes.reset();
 
+		if (GetKey(olc::Key::P).bPressed)
+			(++this->selected_palette) &= 0x07;
+
 		DrawCpu(516, 2);
 		DrawCode(516, 72, 26);
+
+		// Draw Palettes & Pattern Tables ==============================================
+		const int nSwatchSize = 6;
+		for (int p = 0; p < 8; p++)		// For each palette
+			for (int s = 0; s < 4; s++) // For each index
+				FillRect(516 + p * (nSwatchSize * 5) + s * nSwatchSize, 340,
+								 nSwatchSize, nSwatchSize, nes.ppu.getColourFromPaletteRam(p, s));
+
+		// // Draw selection reticule around selected palette
+		DrawRect(516 + this->selected_palette * (nSwatchSize * 5) - 1, 339, (nSwatchSize * 4), nSwatchSize, olc::WHITE);
+
+		DrawSprite(516, 348, &nes.ppu.getPatternTable(0, this->selected_palette));
+		DrawSprite(648, 348, &nes.ppu.getPatternTable(1, this->selected_palette));
 
 		DrawSprite(0, 0, &nes.ppu.getScreen(), 2);
 		return true;
@@ -196,7 +214,7 @@ int main(int argc, char const *argv[])
 {
 	std::cout << "Welcome" << std::endl;
 	Demo_olc6502 demo;
-	demo.Construct(680, 480, 2, 2);
+	demo.Construct(780, 480, 2, 2);
 	demo.Start();
 	return 0;
 }

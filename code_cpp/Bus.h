@@ -31,6 +31,9 @@ public: // devices on bus
   // The Cartridge
   std::shared_ptr<Cartridge> cart;
 
+	// Controllers
+	uint8_t controller[2];
+
 public:
   // Bus Read & Write
   void cpuWrite(uint16_t addr, uint8_t value);

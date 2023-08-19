@@ -28,6 +28,7 @@ private:
   std::shared_ptr<Cartridge> cart;
 
   uint8_t table_name[2][KB];
+  uint8_t table_pattern[2][_4_KB];
   uint8_t table_palette[32];
 
 private:
@@ -43,8 +44,8 @@ public:
   // debug Utils
   olc::Sprite &getScreen();
   olc::Sprite &getNameTable(uint8_t index);
-  olc::Sprite &getPatternTable(uint8_t index);
-
+  olc::Sprite &getPatternTable(uint8_t index,uint8_t palette);
+	olc::Pixel  &getColourFromPaletteRam(uint8_t palette, uint8_t pixel);
   bool frame_complete = false;
 
 private:

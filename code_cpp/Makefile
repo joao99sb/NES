@@ -49,8 +49,33 @@ $(LIBMAPPER): $(MAPPERS_OBJS)
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+
+# Debug
 debug: CXXFLAGS += $(DEBUG_CXXFLAGS)
 debug: $(TARGET)
 
+
+#Cpu teste
+CPU_TEST = cpu_t
+
+CT_SRC = cpu_test/cpu_test.cpp 
+CT_OBJS = $(CT_SRC:.cpp=.o)
+
+CT_INCLUDE= ./cpu_test
+
+CT_CXXFLAGS = -std=c++17 -Wall -I$(CT_INCLUDE) -I$(INCLUDE_DIR)
+cpu_test: $(CPU_TEST)
+
+$(CPU_TEST):$(CT_OBJS) $(LIB6502) 
+	$(CXX) $(LDFLAGS) $(CT_OBJS) $(LIB6502) -o $@
+
+%.o: %.cpp
+	$(CXX) $(CT_CXXFLAGS) -c $< -o $@
+
+# Clean
 clean:
-	rm -f $(OBJS) $(6502_OBJS)  $(PPU_OBJS) $(MAPPERS_OBJS) $(LIB6502) $(LIBMAPPER) $(LIBPPU) $(TARGET)
+	rm -f $(OBJS) $(6502_OBJS)  $(PPU_OBJS) $(MAPPERS_OBJS) $(LIB6502) $(LIBMAPPER) $(LIBPPU) $(TARGET) $(CT_OBJS) $(CPU_TEST)
+
+
+
+

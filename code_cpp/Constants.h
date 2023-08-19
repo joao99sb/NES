@@ -4,6 +4,8 @@ const int KB = 1024;
 
 const int _2_KB = 2 * KB;
 
+const int _4_KB = 4 * KB;
+
 const int _8_KB = 8 * KB;
 
 const int _16_KB = 16 * KB;
